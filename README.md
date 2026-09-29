@@ -64,3 +64,22 @@ réels ». Paramètres : stratégie (attraper le spike / suivre la dérive), âg
 d'entrée, durée maximale, délai de sortie après le spike, lot, stop loss, take
 profit. Sur les données GainX/PainX analysées (voir `analysis/RESULTS.md`),
 aucune combinaison testée n'a eu d'espérance positive après spread.
+
+## Balayer tous les actifs d'un courtier (Deriv, Weltrade...)
+
+1. Dans MT5, afficher dans le Market Watch les symboles à tester, puis lancer le
+   script `mql5/Scripts/ExportTicks.mq5` (14 jours par défaut). Les CSV arrivent
+   dans `MQL5/Files/spikehunter_ticks/`.
+2. Lancer le scanner sur ce dossier :
+
+```bash
+python analysis/scan_all.py "<dossier MQL5/Files/spikehunter_ticks>" --out resume.csv
+```
+
+Pour chaque actif, le scanner teste environ 200 règles (momentum, retour à la
+moyenne, âge du cycle de spikes). Il les calibre sur les 60 premiers pour cent
+des ticks et vérifie la meilleure sur les 40 derniers, avec le vrai spread. Il
+n'affiche « GAGNANT » que si le gain de test dépasse 2 erreurs-types. Sur des
+séries de contrôle, il trouve un avantage caché et ne trouve rien sur une marche
+aléatoire. Le fichier `resume.csv` est petit : c'est lui qu'il faut partager,
+pas les ticks.

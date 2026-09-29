@@ -33,7 +33,7 @@
 
 enum ENUM_SPIKE_DIR
   {
-   SPIKE_AUTO = 0,   // Auto (Boom = haut, Crash = bas)
+   SPIKE_AUTO = 0,   // Auto (Boom/GainX = haut, Crash/PainX = bas)
    SPIKE_UP   = 1,   // Haussier
    SPIKE_DOWN = 2,   // Baissier
    SPIKE_BOTH = 3    // Les deux
@@ -113,9 +113,9 @@ int OnInit()
    g_dir = (int)InpDirection;
    if(g_dir == SPIKE_AUTO)
      {
-      if(StringFind(upper, "BOOM") >= 0)
+      if(StringFind(upper, "BOOM") >= 0 || StringFind(upper, "GAINX") >= 0)
          g_dir = SPIKE_UP;
-      else if(StringFind(upper, "CRASH") >= 0)
+      else if(StringFind(upper, "CRASH") >= 0 || StringFind(upper, "PAINX") >= 0)
          g_dir = SPIKE_DOWN;
       else
          g_dir = SPIKE_BOTH;

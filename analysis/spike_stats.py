@@ -8,6 +8,7 @@ moyenne des ticks normaux récents.
 Formats acceptés (séparateur tabulation, virgule ou point-virgule détecté seul) :
   - ticks MT5 : <DATE> <TIME> <BID> <ASK> ...
   - bougies MT5 : <DATE> <TIME> <OPEN> <HIGH> <LOW> <CLOSE> ...
+  - export MQL5 CopyTicks : time_msc,bid,ask
   - générique : une colonne date/heure et une colonne bid ou close
 
 Exemples :
@@ -48,7 +49,9 @@ def read_mt5_csv(path):
     df = pd.read_csv(path, sep=sep, encoding_errors="replace")
     df.columns = [c.strip().strip("<>").lower() for c in df.columns]
 
-    if "date" in df.columns and "time" in df.columns:
+    if "time_msc" in df.columns:
+        stamp = pd.to_datetime(pd.to_numeric(df["time_msc"], errors="coerce"), unit="ms")
+    elif "date" in df.columns and "time" in df.columns:
         stamp = pd.to_datetime(df["date"].astype(str) + " " + df["time"].astype(str),
                                errors="coerce")
     else:
@@ -184,15 +187,25 @@ def plot(r, title, out):
     fig = plt.figure(figsize=(13, 9), constrained_layout=True)
     gs = fig.add_gridspec(2, 2, height_ratios=[1.3, 1])
     ax = fig.add_subplot(gs[0, :])
-    ax.plot(r.times, r.prices, lw=0.6, color="#4a5568")
-    if len(r.spike_idx):
+    # Au-delà de 40 spikes, les flèches couvrent toute la courbe : on zoome
+    # sur les 40 derniers pour garder les spikes lisibles.
+    lo, zoom = 0, ""
+    if len(r.spike_idx) > 40:
+        lo = max(r.spike_idx[-40] - 200, 0)
+        zoom = " (zoom sur les 40 derniers)"
+    t, pr = r.times[lo:], r.prices[lo:]
+    step = max(len(pr) // 200_000, 1)   # alléger le tracé des gros fichiers
+    ax.plot(t[::step], pr[::step], lw=0.6, color="#4a5568")
+    sel = r.spike_idx >= lo
+    if sel.any():
         up = r.spike_size > 0
-        ax.scatter(r.times[r.spike_idx[up]], r.prices[r.spike_idx[up]], marker="^",
-                   color="#16a34a", s=30, zorder=3, label="spike haussier")
-        ax.scatter(r.times[r.spike_idx[~up]], r.prices[r.spike_idx[~up]], marker="v",
-                   color="#dc2626", s=30, zorder=3, label="spike baissier")
+        for mask, marker, color, label in ((sel & up, "^", "#16a34a", "spike haussier"),
+                                           (sel & ~up, "v", "#dc2626", "spike baissier")):
+            if mask.any():
+                ax.scatter(r.times[r.spike_idx[mask]], r.prices[r.spike_idx[mask]],
+                           marker=marker, color=color, s=30, zorder=3, label=label)
         ax.legend(loc="upper left")
-    ax.set_title(f"{title} : {len(r.spike_idx)} spikes")
+    ax.set_title(f"{title} : {len(r.spike_idx)} spikes{zoom}")
     ax.grid(alpha=0.3)
 
     ax2 = fig.add_subplot(gs[1, 0])
@@ -216,9 +229,10 @@ def plot(r, title, out):
               for b in range(HAZARD_BINS)]
     with np.errstate(divide="ignore", invalid="ignore"):
         rate = np.where(r.haz_exposure > 0, r.haz_events / r.haz_exposure, np.nan)
-    ax3.bar(labels, rate * r.nominal, color="#f59e0b")
-    ax3.axhline(1.0, color="#1e3a8a", ls="--", label="nominal (1 / période)")
-    ax3.set_title("Probabilité de spike selon l'âge (relative au nominal)")
+    mean_rate = r.haz_events.sum() / max(r.haz_exposure.sum(), 1)
+    ax3.bar(labels, rate / mean_rate if mean_rate else rate, color="#f59e0b")
+    ax3.axhline(1.0, color="#1e3a8a", ls="--", label="taux moyen observé")
+    ax3.set_title("Probabilité de spike selon l'âge (1 = moyenne ; plat = sans mémoire)")
     ax3.set_xlabel(f"{r.unit} depuis le dernier spike")
     ax3.legend()
     ax3.grid(alpha=0.3, axis="y")
@@ -268,7 +282,12 @@ def main():
     direction = a.direction
     if direction == "auto":
         low = name.lower()
-        direction = "up" if "boom" in low else ("down" if "crash" in low else "both")
+        if any(k in low for k in ("boom", "gainx")):
+            direction = "up"
+        elif any(k in low for k in ("crash", "painx")):
+            direction = "down"
+        else:
+            direction = "both"
     nominal = a.nominal or a.demo
     if not nominal:
         m = re.search(r"(\d{3,4})", name)

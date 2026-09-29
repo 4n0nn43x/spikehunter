@@ -59,6 +59,7 @@ long   g_ticks      = 0;
 long   g_age        = -1;       // -1 tant qu'aucun spike n'a été vu
 long   g_lastSpikeTick = -1000000;
 long   g_spikes     = 0;
+ulong  g_firstMsc   = 0;       // premier tick traité (contrôle de la densité)
 
 //--- état de la position
 bool   g_inTrade      = false;
@@ -146,15 +147,20 @@ void OnTick()
    if(!g_inTrade)
       TryEnter();
 
-   Comment(StringFormat("SpikeHunterEA  %s\nÂge : %s ticks   Spikes vus : %I64d\nPosition : %s",
+   string warn = "";
+   if(g_ticks >= 10 && (double)(g_lastMsc - g_firstMsc) / g_ticks > 5000.0)
+      warn = "\nATTENTION : trop peu de ticks. Testeur : \"Chaque tick basé sur les ticks réels\".";
+   Comment(StringFormat("SpikeHunterEA  %s\nÂge : %s ticks   Spikes vus : %I64d\nPosition : %s%s",
                         InpMode == MODE_CATCH_SPIKE ? "attraper le spike" : "suivre la dérive",
                         g_age < 0 ? "en attente du 1er spike" : IntegerToString(g_age),
-                        g_spikes, g_inTrade ? "ouverte" : "aucune"));
+                        g_spikes, g_inTrade ? "ouverte" : "aucune", warn));
   }
 
 //+------------------------------------------------------------------+
 void ProcessTick(const MqlTick &t)
   {
+   if(g_firstMsc == 0)
+      g_firstMsc = (ulong)t.time_msc;
    if((ulong)t.time_msc == g_lastMsc)
       g_sameMsc++;
    else
@@ -191,7 +197,10 @@ void ProcessTick(const MqlTick &t)
       return;
      }
 
+   //--- plafonne un tick anormal pour qu'un spike non détecté ne gonfle pas le bruit
    double a = MathAbs(delta);
+   if(g_noiseCount > 0)
+      a = MathMin(a, 5.0 * g_noise);
    g_noise = g_noiseCount == 0 ? a : g_noise + g_alpha * (a - g_noise);
    g_noiseCount++;
   }

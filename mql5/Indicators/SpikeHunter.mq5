@@ -74,6 +74,7 @@ double g_alpha      = 0.01;
 //--- état du flux de ticks
 bool   g_loaded      = false;
 int    g_loadTries   = 0;
+ulong  g_firstMsc    = 0;     // premier tick traité (contrôle de la densité)
 ulong  g_lastMsc     = 0;
 int    g_sameMsc     = 0;     // ticks déjà traités ayant g_lastMsc
 double g_prevBid     = 0.0;
@@ -239,6 +240,8 @@ void PollTicks()
 //+------------------------------------------------------------------+
 void ProcessTick(const MqlTick &t, const bool live)
   {
+   if(g_firstMsc == 0)
+      g_firstMsc = (ulong)t.time_msc;
    if((ulong)t.time_msc == g_lastMsc)
       g_sameMsc++;
    else
@@ -282,7 +285,10 @@ void ProcessTick(const MqlTick &t, const bool live)
      }
 
    //--- tick normal : met à jour l'amplitude moyenne et la dérive
+   //--- plafonne un tick anormal pour qu'un spike non détecté ne gonfle pas le bruit
    double a = MathAbs(delta);
+   if(g_noiseCount > 0)
+      a = MathMin(a, 5.0 * g_noise);
    g_noise = g_noiseCount == 0 ? a : g_noise + g_alpha * (a - g_noise);
    g_noiseCount++;
    g_driftSum += delta;
@@ -379,6 +385,10 @@ void ShowPanel()
    string s = "SpikeHunter  " + _Symbol + "  (sens : " + dirTxt
               + ", nominal : 1 spike / " + IntegerToString(g_nominal) + " ticks)\n";
    s += StringFormat("Ticks analysés : %I64d   Spikes : %d\n", g_ticks, g_nEvents);
+   if(g_ticks >= 10 && (double)(g_lastMsc - g_firstMsc) / g_ticks > 5000.0)
+      s += StringFormat("ATTENTION : 1 tick toutes les %.0f s en moyenne. Il faut le flux tick par tick\n"
+                        + "(testeur : \"Chaque tick basé sur les ticks réels\") pour détecter les spikes.\n",
+                        (double)(g_lastMsc - g_firstMsc) / g_ticks / 1000.0);
    s += StringFormat("Ticks depuis le dernier spike : %I64d\n", g_age);
    s += StringFormat("Écart moyen : %.0f ticks   CV : %.3f  (1.0 = sans mémoire)\n", meanGap, cv);
    s += StringFormat("Taille moyenne du spike : %.0f pts   Dérive/tick : %.4f pts\n",

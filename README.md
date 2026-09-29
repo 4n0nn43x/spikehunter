@@ -7,6 +7,7 @@ Détection de spikes sur les indices synthétiques Boom / Crash (Deriv, MetaTrad
 | Fichier | Rôle |
 | --- | --- |
 | `mql5/Indicators/SpikeHunter.mq5` | Indicateur MT5 : détecte chaque spike au tick près, place une flèche sur le graphique, alerte en direct et affiche les statistiques d'intervalle. |
+| `mql5/Experts/SpikeHunterEA.mq5` | EA : entre à un âge donné du cycle (ticks depuis le dernier spike), soit dans le sens du spike, soit dans le sens de la dérive, et sort après le spike ou au bout d'une durée maximale. |
 | `analysis/spike_stats.py` | Même algorithme hors-ligne sur un export CSV de MT5 (ticks ou bougies), avec rapport texte et graphique PNG. |
 
 ## Méthode
@@ -54,3 +55,12 @@ python analysis/spike_stats.py --demo 1000     # série synthétique de test
 
 Options : `--direction up|down|both`, `--threshold`, `--window`, `--merge`,
 `--nominal`. Sur des bougies, le seuil par défaut est 4 x le range moyen.
+
+## EA
+
+Copier `mql5/Experts/SpikeHunterEA.mq5` dans `MQL5/Experts/`, compiler, puis le
+lancer dans le testeur de stratégie en mode « Chaque tick basé sur les ticks
+réels ». Paramètres : stratégie (attraper le spike / suivre la dérive), âge
+d'entrée, durée maximale, délai de sortie après le spike, lot, stop loss, take
+profit. Sur les données GainX/PainX analysées (voir `analysis/RESULTS.md`),
+aucune combinaison testée n'a eu d'espérance positive après spread.
